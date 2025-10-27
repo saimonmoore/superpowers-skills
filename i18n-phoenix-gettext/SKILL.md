@@ -19,8 +19,13 @@ Use this skill when:
 - Working with Ash resources (custom validations)
 - Setting up i18n for a new Phoenix project
 - User reports translations not working
+- **Reviewing or auditing existing translations** (check for missing subjects and literal translations)
+- Translating error messages (must add subjects and translate semantically)
 
-**Critical check:** Before adding ANY user-facing text, ask: "Is this wrapped for translation?"
+**Critical checks:**
+- Before adding ANY user-facing text: "Is this wrapped for translation?"
+- Before marking translation work complete: "Did I add subjects to ALL validation errors?"
+- Before translating semantic keys: "Am I translating the MEANING or just the words?"
 
 ## Quick Reference: The Complete i18n Workflow
 
@@ -36,14 +41,22 @@ docker compose exec app mix gettext.extract --merge
 ./bin/translate-gettext.sh  # If project has automation
 # OR manually edit priv/gettext/*/LC_MESSAGES/*.po
 
+# 3a. 🚨 QUALITY CHECK (CRITICAL!)
+# - Add subjects to ALL validation errors ("This field..." / "Este campo...")
+# - Translate semantic keys meaningfully (not literally!)
+# - Review ALL locales together for consistency
+# - No underscore-separated translations allowed!
+
 # 4. RESTART app (gettext caches compiled .po files)
 docker compose restart app
 
 # 5. Verify in ALL supported locales
 # Test via Accept-Language header, locale cookie, or UI switcher
+# Verify validation errors show subjects
+# Check semantic translations are natural, not literal
 ```
 
-**Never skip steps 3-5!** Extract alone is incomplete.
+**Never skip steps 3-5!** Extract alone is incomplete. **Step 3a is MANDATORY for error messages!**
 
 ## Domain Selection Guide
 
@@ -165,7 +178,7 @@ mix gettext.translate                # Custom mix task
 
 ### Manual Translation (Last Resort)
 
-If you must translate manually:
+If you must translate manually, follow **translation quality patterns** (see next section).
 
 ```bash
 # Edit each locale file
@@ -182,6 +195,149 @@ msgstr "¡Bienvenido a nuestra comunidad!"  # Spanish
 ```
 
 **Do ALL locales immediately.** Don't defer translation "for later."
+
+## Translation Quality Patterns
+
+**🚨 CRITICAL:** These patterns are MANDATORY for all translations.
+
+### Pattern 1: Add Subjects to Form Validation Errors
+
+**Problem:** Ecto/Ash validation messages lack context because `AshPhoenix.FormData.Error` strips field names.
+
+**❌ WRONG - Subject-less translations:**
+```po
+# errors.po (English)
+msgid "can't be blank"
+msgstr "can't be blank"
+
+msgid "should have at least %{count} item(s)"
+msgstr[0] "should have at least %{count} item"
+msgstr[1] "should have at least %{count} items"
+
+msgid "must be less than %{number}"
+msgstr "must be less than %{number}"
+
+# errors.po (Spanish)
+msgid "can't be blank"
+msgstr "no puede estar en blanco"  # Missing subject!
+```
+
+**✅ CORRECT - Contextual translations with subjects:**
+```po
+# errors.po (English)
+msgid "can't be blank"
+msgstr "This field is required"  # Added subject + clearer wording
+
+msgid "should have at least %{count} item(s)"
+msgstr[0] "This field should have at least %{count} item"
+msgstr[1] "This field should have at least %{count} items"
+
+msgid "must be less than %{number}"
+msgstr "This field must be less than %{number}"
+
+# errors.po (Spanish)
+msgid "can't be blank"
+msgstr "Este campo es obligatorio"  # Subject + context
+
+msgid "should have at least %{count} item(s)"
+msgstr[0] "Este campo debe tener al menos %{count} elemento"
+msgstr[1] "Este campo debe tener al menos %{count} elementos"
+```
+
+**Subject patterns by language:**
+- **English**: "This field..." / "This item..." / "This value..."
+- **Spanish**: "Este campo..." / "Este elemento..." / "Este valor..."
+- **Catalan**: "Aquest camp..." / "Aquest element..." / "Aquest valor..."
+- **French**: "Ce champ..." / "Cet élément..." / "Cette valeur..."
+- **German**: "Dieses Feld..." / "Dieses Element..." / "Dieser Wert..."
+- **Greek**: "Αυτό το πεδίο..." / "Αυτό το στοιχείο..." / "Αυτή η τιμή..."
+
+**Why:** Without subjects, messages like "is required" or "must be less than 5" are confusing. Always add context.
+
+### Pattern 2: Semantic Translation (Not Literal)
+
+**Problem:** Custom validation keys use semantic msgids, but translations must interpret MEANING, not translate literally.
+
+**❌ WRONG - Literal translation of key:**
+```po
+# errors.po (English)
+msgid "invitation_cannot_invite_yourself"
+msgstr "invitation_cannot_invite_yourself"  # Key as translation!
+
+msgid "latitude_out_of_range"
+msgstr "latitude_out_of_range"  # Literal key
+
+# errors.po (Spanish)
+msgid "invitation_cannot_invite_yourself"
+msgstr "invitación_no_puede_invitarse_a_usted_mismo"  # Literal translation of key!
+
+msgid "latitude_out_of_range"
+msgstr "latitud_fuera_de_rango"  # Still looks like a key
+```
+
+**✅ CORRECT - Semantic interpretation:**
+```po
+# errors.po (English)
+msgid "invitation_cannot_invite_yourself"
+msgstr "You cannot invite yourself"  # User-friendly message
+
+msgid "latitude_out_of_range"
+msgstr "Latitude must be between -90 and 90"  # Clear, actionable
+
+msgid "start_time_cannot_be_past"
+msgstr "Start time cannot be in the past"  # Natural language
+
+# errors.po (Spanish)
+msgid "invitation_cannot_invite_yourself"
+msgstr "No puedes invitarte a ti mismo"  # Natural Spanish
+
+msgid "latitude_out_of_range"
+msgstr "La latitud debe estar entre -90 y 90"  # Clear constraint
+
+msgid "start_time_cannot_be_past"
+msgstr "La hora de inicio no puede estar en el pasado"  # Natural
+```
+
+**Pattern recognition:**
+- If msgid contains underscores → semantic key → translate the MEANING
+- Read the key, understand the validation, write natural language
+- Use proper articles, pronouns, sentence structure
+- Make it helpful (e.g., include valid ranges: "between -90 and 90")
+
+**Common semantic patterns:**
+- `field_name_invalid` → "The [field name] format is invalid"
+- `something_already_exists` → "This [something] already exists"
+- `cannot_do_action` → "You cannot [do action]"
+- `must_be_after_X` → "[Field] must be after [X]"
+- `out_of_range` → "[Field] must be between X and Y"
+
+### Pattern 3: Consistency Across Locales
+
+**All locales must follow the same patterns:**
+
+```po
+# English - Set the pattern
+msgid "phone_format_invalid"
+msgstr "Phone number format is invalid"
+
+# Spanish - Follow the pattern
+msgid "phone_format_invalid"
+msgstr "El formato del número de teléfono no es válido"
+
+# French - Follow the pattern
+msgid "phone_format_invalid"
+msgstr "Le format du numéro de téléphone n'est pas valide"
+
+# German - Follow the pattern
+msgid "phone_format_invalid"
+msgstr "Das Telefonnummernformat ist ungültig"
+```
+
+**Review all locales together** to ensure consistency in:
+- Subject usage (all have subjects or all don't)
+- Tone (formal vs informal)
+- Structure (similar sentence patterns)
+- Completeness (no missing translations)
 
 ## Ash Framework Integration
 
@@ -242,6 +398,7 @@ end
 
 **Before claiming "i18n is done":**
 
+### Workflow Completeness
 - [ ] All user-facing strings wrapped in gettext/dgettext
 - [ ] Ran `mix gettext.extract --merge`
 - [ ] Translated to ALL supported locales (not just one)
@@ -249,6 +406,20 @@ end
 - [ ] Tested in at least 2 locales (e.g., English + Spanish)
 - [ ] Verified via browser (Accept-Language header or locale cookie)
 - [ ] Checked that missing translations fall back gracefully
+
+### Translation Quality (🚨 CRITICAL)
+- [ ] **All form validation errors have subjects** ("This field is required" not "is required")
+- [ ] **Semantic msgids have semantic translations** ("You cannot invite yourself" not "invitation_cannot_invite_yourself")
+- [ ] No literal translation of underscore-separated keys
+- [ ] Consistent tone and structure across all locales
+- [ ] Reviewed all 6 locales together (not one at a time)
+- [ ] Error messages are user-friendly and actionable
+
+### Domain Correctness
+- [ ] UI copy uses "app" domain
+- [ ] Custom validations use "errors" domain
+- [ ] Ash framework messages use "ash_errors" domain
+- [ ] No domain confusion or mixing
 
 **If you can't check all boxes, work is incomplete.**
 
@@ -326,20 +497,92 @@ curl http://localhost:4000/
 
 **Fix:** Test at least 2 locales to catch translation issues
 
+### ❌ Subject-less Form Validation Errors
+```po
+# WRONG - Missing context
+msgid "can't be blank"
+msgstr "no puede estar en blanco"  # Spanish
+
+msgid "must be less than %{number}"
+msgstr "debe ser inferior a %{number}"  # Spanish
+```
+
+**Fix:** Add subjects to provide context
+```po
+# CORRECT
+msgid "can't be blank"
+msgstr "Este campo es obligatorio"  # Spanish
+
+msgid "must be less than %{number}"
+msgstr "Este campo debe ser inferior a %{number}"  # Spanish
+```
+
+### ❌ Literal Translation of Semantic Keys
+```po
+# WRONG - Literal translation
+msgid "invitation_cannot_invite_yourself"
+msgstr "invitación_no_puede_invitarse_a_usted_mismo"  # Looks like a key!
+
+msgid "latitude_out_of_range"
+msgstr "latitud_fuera_de_rango"  # Still underscore-separated
+```
+
+**Fix:** Translate the MEANING, not the words
+```po
+# CORRECT - Semantic interpretation
+msgid "invitation_cannot_invite_yourself"
+msgstr "No puedes invitarte a ti mismo"  # Natural Spanish
+
+msgid "latitude_out_of_range"
+msgstr "La latitud debe estar entre -90 y 90"  # User-friendly
+```
+
+### ❌ Inconsistent Translation Quality Across Locales
+```po
+# English - Good quality
+msgid "phone_format_invalid"
+msgstr "Phone number format is invalid"
+
+# Spanish - Missing subject
+msgid "phone_format_invalid"
+msgstr "formato no válido"  # Incomplete!
+
+# French - Literal key translation
+msgid "phone_format_invalid"
+msgstr "phone_format_invalide"  # Wrong!
+```
+
+**Fix:** Review all locales together for consistency
+```po
+# All locales following same pattern
+# English
+msgstr "Phone number format is invalid"
+# Spanish
+msgstr "El formato del número de teléfono no es válido"
+# French
+msgstr "Le format du numéro de téléphone n'est pas valide"
+```
+
 ## Rationalizations to Avoid
 
 | Excuse | Reality |
 |--------|---------|
 | "I'll manually translate the .po files" | For 6 languages, this is unsustainable. Check for automation first. |
 | "Just run gettext.extract and you're done" | Workflow incomplete. Must: extract → translate → restart → verify all locales. |
-| "The code is correct" | Mechanics ≠ complete workflow. Did you restart? Test all locales? |
+| "The code is correct" | Mechanics ≠ complete workflow. Did you restart? Test all locales? Check translation quality? |
 | "I'll add translations to other languages later" | "Later" never comes. Do all locales now or document why not. |
 | "This domain seems right" | Don't guess. Use decision guide: UI copy → app, validation → errors, framework → ash_errors. |
 | "Translation is simple/obvious" | Simple for 1 locale ≠ simple for 6 locales × 100 strings. |
+| **"The translation matches the English"** | **Not enough! Must add subjects to validation errors and translate semantically.** |
+| **"I translated all the words"** | **Literal translation ≠ semantic translation. Interpret the MEANING, not the words.** |
+| **"Underscores in Spanish are fine"** | **No! Underscore-separated text = looks like a key = bad UX. Use natural language.** |
+| **"Users will understand 'is required'"** | **No subject = confusing. Always add "This field..." / "Este campo..." / etc.** |
+| **"I'll review locales individually"** | **Must review ALL locales together to ensure consistency in patterns and quality.** |
 
 ## Red Flags - STOP and Reconsider
 
-- 🚩 Manually editing multiple .po files
+### Workflow Red Flags
+- 🚩 Manually editing multiple .po files (without checking for automation)
 - 🚩 Not testing in at least 2 locales
 - 🚩 Saying "done" after just `mix gettext.extract`
 - 🚩 Not restarting app after .po changes
@@ -347,7 +590,16 @@ curl http://localhost:4000/
 - 🚩 Using English text as msgid without discussing trade-offs
 - 🚩 Forgetting some languages (if app supports 6, translate all 6)
 
-**All of these mean: Workflow is incomplete. Review checklist above.**
+### Translation Quality Red Flags (🚨 CRITICAL)
+- 🚩 **Validation errors without subjects** ("is required" instead of "This field is required")
+- 🚩 **Underscore-separated translations** ("latitud_fuera_de_rango" instead of "La latitud debe estar...")
+- 🚩 **Literal translation of keys** (translating "invitation_cannot_invite_yourself" word-by-word)
+- 🚩 **Inconsistent subjects across locales** (English has subject, Spanish doesn't)
+- 🚩 **Only reviewing one locale at a time** (instead of comparing all 6 together)
+- 🚩 **Translation that looks like a key** (if it has underscores, it's wrong!)
+- 🚩 **Subject-less error messages in any language** (check ALL locales)
+
+**All of these mean: Translation quality is poor. Review "Translation Quality Patterns" section.**
 
 ## Project Setup (Reference)
 
