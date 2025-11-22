@@ -1,0 +1,20 @@
+{
+    "name": "saimonmoore-superpowers-marketplace",
+    "owner": {
+        "name": "Saimon Moore",
+        "email": "registrations@saimonmoore.org"
+    },
+    "metadata": {
+        "description": "Curated Claude Code plugins: skills, workflows, and productivity tools",
+        "version": "0.0.1"
+    },
+    "plugins": [
+        {
+            "name": "saimonmoore-superpowers",
+            "source": "./",
+            "description": "Core skills library: qa testing, i18n, frontend design & development with daisyui and phoenix liveview",
+            "version": "0.0.1",
+            "strict": true
+        }
+    ]
+}
