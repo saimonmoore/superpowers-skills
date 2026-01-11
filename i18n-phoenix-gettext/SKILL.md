@@ -35,20 +35,18 @@ dgettext("app", "welcome_message")           # UI copy
 dgettext("errors", "username_invalid")        # Custom validation errors
 
 # 2. Extract new strings to .po files
-docker compose exec app mix gettext.extract --merge
+./bin/extract-gettext
 
-# 3. Translate strings (CHECK FOR AUTOMATION FIRST!)
+# 3. Add engilish translation to  `en` locale .po file
+# 4. Translate strings (CHECK FOR AUTOMATION FIRST!)
 ./bin/translate-gettext.sh  # If project has automation
 # OR manually edit priv/gettext/*/LC_MESSAGES/*.po
 
-# 3a. 🚨 QUALITY CHECK (CRITICAL!)
+# 4a. 🚨 QUALITY CHECK (CRITICAL!)
 # - Add subjects to ALL validation errors ("This field..." / "Este campo...")
 # - Translate semantic keys meaningfully (not literally!)
 # - Review ALL locales together for consistency
 # - No underscore-separated translations allowed!
-
-# 4. RESTART app (gettext caches compiled .po files)
-docker compose restart app
 
 # 5. Verify in ALL supported locales
 # Test via Accept-Language header, locale cookie, or UI switcher
@@ -56,7 +54,7 @@ docker compose restart app
 # Check semantic translations are natural, not literal
 ```
 
-**Never skip steps 3-5!** Extract alone is incomplete. **Step 3a is MANDATORY for error messages!**
+**Never skip steps 2-5!** Extract alone is incomplete. **Step 4a is MANDATORY for error messages!**
 
 ## Domain Selection Guide
 
