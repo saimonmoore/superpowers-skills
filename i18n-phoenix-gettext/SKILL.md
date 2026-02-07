@@ -37,16 +37,13 @@ dgettext("errors", "username_invalid")        # Custom validation errors
 # 2. Extract new strings to .po files
 ./bin/extract-gettext
 
-# 3. Add engilish translation to  `en` locale .po file
-# 4. Translate strings (CHECK FOR AUTOMATION FIRST!)
-./bin/translate-gettext.sh  # If project has automation
-# OR manually edit priv/gettext/*/LC_MESSAGES/*.po
+# 3. Add english translation to `en` locale .po file
+# 4. Run ./bin/translate-gettext.sh if present to automatically translate other locales or fallback to manually editing priv/gettext/*/LC_MESSAGES/*.po
 
 # 4a. 🚨 QUALITY CHECK (CRITICAL!)
-# - Add subjects to ALL validation errors ("This field..." / "Este campo...")
-# - Translate semantic keys meaningfully (not literally!)
+# - ALWAYS use semantic keys using periods NO underscores or hyphens! e.g. layout.menu.profile
 # - Review ALL locales together for consistency
-# - No underscore-separated translations allowed!
+# - Add subjects to ALL validation errors ("This field..." / "Este campo...")
 
 # 5. Verify in ALL supported locales
 # Test via Accept-Language header, locale cookie, or UI switcher
