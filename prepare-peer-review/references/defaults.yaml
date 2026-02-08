@@ -1,0 +1,29 @@
+optimal_lines: 50
+max_lines: 200
+max_files: 10
+
+mechanical_exceptions:
+  - formatting
+  - linting
+  - codemod
+  - single-change-multi-file
+
+first_commit_token:
+  mode: optional  # optional | required | regex
+  value: ""
+
+staging:
+  create: true
+  branch: staging
+
+ignore_checks:
+  - Enforce PR labels
+  - PR Approval Gatekeeper
+
+pr_template:
+  use_if_present: true
+
+gh:
+  prefer: true
+
+base_branch: main

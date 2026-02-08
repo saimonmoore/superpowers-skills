@@ -1,0 +1,32 @@
+# Per-repo overrides for prepare-peer-review
+# Place as .codex/prepare-peer-review.yaml in a repo
+
+optimal_lines: 60
+max_lines: 220
+max_files: 12
+
+mechanical_exceptions:
+  - formatting
+  - linting
+  - codemod
+  - single-change-multi-file
+
+first_commit_token:
+  mode: required  # optional | required | regex
+  value: "JCOM-1724"
+
+staging:
+  create: true
+  branch: xingboxes
+
+ignore_checks:
+  - Enforce PR labels
+  - PR Approval Gatekeeper
+
+pr_template:
+  use_if_present: true
+
+gh:
+  prefer: true
+
+base_branch: main

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Prepare Peer Review"
+  short_description: "Plan review-friendly PR/branch splits and staging branch"
+  default_prompt: "Prepare for peer review: analyze current changes or tasks and propose a PR/branch plan with size targets, staging branch, and dependencies. Wait for approval before changes."
