@@ -1,0 +1,4 @@
+interface:
+  display_name: "Findings/Fixings Browser QA Loop"
+  short_description: "Run a disciplined manual QA loop with QA.md and QA_FINDINGS.md"
+  default_prompt: "Run the findings/fixings browser QA loop for this feature."
