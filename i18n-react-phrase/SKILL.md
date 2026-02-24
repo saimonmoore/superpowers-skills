@@ -95,17 +95,9 @@ export const MyComponent = () => {
 
 **CRITICAL:** Always specify which project/tag you're targeting.
 
-```typescript
-// Using Phrase MCP tool
-mcp__phrase__phrase_push_translations({
-  translations: {
-    "MY_NEW_KEY": {
-      "en": "You have {count, plural, one {# item} other {# items}}",
-      "de": "Sie haben {count, plural, one {# Artikel} other {# Artikel}}"
-    }
-  },
-  tags: "jobs-b2b-frontend-app"  // ← SPECIFIC TAG
-})
+```bash
+# Push all configured source files and tag uploaded keys
+phrase push --tag jobs-b2b-frontend-app --wait
 ```
 
 ### 3. Pull ALL Projects (MANDATORY)
@@ -113,11 +105,6 @@ mcp__phrase__phrase_push_translations({
 ```bash
 # This pulls from ALL configured projects in .phrase.yml
 phrase pull
-```
-
-**Or via MCP:**
-```typescript
-mcp__phrase__phrase_pull()  // No parameters = pulls all configured targets
 ```
 
 ### 4. Verify Both Project Translations Present
