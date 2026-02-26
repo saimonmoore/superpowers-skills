@@ -90,6 +90,7 @@ export const MyComponent = () => {
   );
 };
 ```
+IMPORTANT: You should use the same semantic format of existing i18n keys found in the codebase adapted to the topic at hand. Confirm the chosen generic prefix for the topic with the human as a clarifying question.
 
 ### 2. Push to Phrase with Specific Tag
 
