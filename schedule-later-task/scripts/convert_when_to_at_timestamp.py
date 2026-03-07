@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import json
 import re
+import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -43,19 +44,28 @@ def parse_args() -> argparse.Namespace:
 def resolve_timezone(args_timezone: str | None) -> tuple[ZoneInfo, list[str]]:
     assumptions: list[str] = []
     if args_timezone:
-        return ZoneInfo(args_timezone), assumptions
+        try:
+            return ZoneInfo(args_timezone), assumptions
+        except Exception as error:
+            raise ConversionError(f"Invalid timezone '{args_timezone}': {error}") from error
+
+    env_tz = os.environ.get("TZ")
+    if env_tz:
+        try:
+            tz = ZoneInfo(env_tz)
+            assumptions.append(f"used TZ environment timezone {env_tz}")
+            return tz, assumptions
+        except Exception:
+            assumptions.append(f"ignored invalid TZ environment value {env_tz}")
 
     local_tz = datetime.now().astimezone().tzinfo
-    if local_tz is None:
-        raise ConversionError("Unable to resolve local timezone")
+    local_key = getattr(local_tz, "key", None) if local_tz is not None else None
+    if local_key:
+        assumptions.append(f"used local timezone {local_key}")
+        return ZoneInfo(local_key), assumptions
 
-    tz_key = getattr(local_tz, "key", None)
-    if tz_key is None:
-        raise ConversionError("Local timezone has no IANA key; provide --timezone explicitly")
-
-    assumptions.append(f"used local timezone {tz_key}")
-    return ZoneInfo(tz_key), assumptions
-
+    assumptions.append("fell back to UTC timezone")
+    return ZoneInfo("UTC"), assumptions
 
 def resolve_now(now_value: str | None, tz: ZoneInfo) -> datetime:
     if not now_value:
@@ -220,10 +230,10 @@ def convert_when_expression(raw_when: str, now: datetime, tz: ZoneInfo, assumpti
 
 def main() -> None:
     args = parse_args()
-    tz, assumptions = resolve_timezone(args.timezone)
-    now = resolve_now(args.now, tz)
 
     try:
+        tz, assumptions = resolve_timezone(args.timezone)
+        now = resolve_now(args.now, tz)
         result = convert_when_expression(args.when, now, tz, assumptions)
     except ConversionError as error:
         print(json.dumps({"error": str(error)}))

@@ -1,5 +1,4 @@
 ---
-# <project-slug>
 title: '<task title>'
 status: todo
 type: task

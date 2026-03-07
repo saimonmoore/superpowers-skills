@@ -1,19 +1,19 @@
 ---
 name: schedule-later-task
-description: Use when a user asks to create a task now and execute it later at a specified time/date (for example "tomorrow morning", "in 2 hours", "Monday at 5pm"); refines the task against the repo, persists a bean in .beans/, confirms it with the user, verifies at(1), and schedules asynchronous execution with codex or omp
+description: Use when a user asks to create a task now and execute it at a later time/date (for example "tomorrow morning", "in 2 hours", "Monday at 5pm") and both WHAT and WHEN are present
 ---
 
 # Schedule Later Task
 
 ## Overview
 
-Convert a natural-language request into a deferred execution task. Refine scope against the active repository, persist a bean task in `.beans/`, confirm the bean content with the user, and schedule asynchronous execution through `at`.
+Convert a natural-language deferred-work request into a deterministic scheduled execution. Refine scope against the repository, persist a bean task, and schedule asynchronous execution through `at -t`.
 
 ## Trigger Conditions
 
 Trigger only when BOTH elements are present:
-1. **WHAT**: a concrete task to execute later.
-2. **WHEN**: a concrete scheduling phrase (date/time/delay/time window).
+1. **WHAT**: concrete task to execute.
+2. **WHEN**: concrete scheduling phrase.
 
 Do not trigger if WHEN is missing.
 
@@ -26,98 +26,122 @@ Do not trigger if WHEN is missing.
 
 ## Required Inputs
 
-Collect/derive these values before scheduling:
+Collect/derive before scheduling:
+- `task_description`
+- `when_expression`
+- `timezone` (IANA, for example `Europe/Berlin`; required unless user allows fallback)
+- `llm_cli` (`codex` default, `omp` only when explicitly requested)
 
-- `task_description`: what needs to be done.
-- `when_expression`: user’s natural-language schedule phrase.
-- `llm_cli`: `codex` (default) or `omp` (if user explicitly asks).
+## Path Resolution
+
+Resolve and use absolute paths for all script calls.
+
+```bash
+skill_root="/absolute/path/to/schedule-later-task"
+```
+
+All script invocations must use `$skill_root/scripts/...`.
 
 ## Workflow
 
-### 1) Refine the task against the codebase
+### 1) Refine task against codebase
 
-1. Inspect repository context using `find`, `grep`, and `read`.
-2. Clarify concrete scope:
-   - affected directories/packages/apps
-   - constraints/risk areas
-   - verification expectations
-3. Produce a refined task statement and checklist appropriate for execution by an autonomous agent.
+1. Inspect repository context using `find`, `grep`, `read`.
+2. Clarify concrete scope (affected paths, constraints, verification expectations).
+3. Produce refined execution checklist.
 
-### 2) Build bean content using template structure
+### 2) Create bean task from schema template (primary source)
 
-Use the file shape from `.beans/jobs-b2b-idpo--tech-debt-cleanup-and-remove-unused-jobs-backend-d.md` as the format baseline.
+Use `assets/bean-task-template.md` as the canonical structure.
 
-If that file is unavailable, use `assets/bean-task-template.md`.
+Optional: use `.beans/jobs-b2b-idpo--tech-debt-cleanup-and-remove-unused-jobs-backend-d.md` only as style reference when available.
 
-Persist a new bean file under `.beans/` with:
-- YAML frontmatter (`title`, `status: todo`, `type: task`, `priority`, `tags`, timestamps)
+Before writing bean:
+
+```bash
+mkdir -p .beans
+```
+
+Then persist a bean under `.beans/` with:
+- frontmatter (`title`, `status: todo`, `type: task`, `priority`, `tags`, `created_at`, `updated_at`)
 - `## Goal`
 - `## Scope`
 - `## Checklist`
 - `## Definition of Done`
 
-Set `created_at`/`updated_at` to current UTC timestamp.
+### 3) Confirmation policy (conditional)
 
-### 3) Display bean for confirmation
+- **Proceed without blocking confirmation** when WHAT/WHEN are clear, non-destructive, and low-risk.
+- **Require explicit confirmation** when request is ambiguous, destructive, high-risk, or impacts production/data/security boundaries.
 
-Read back the created bean file and present it verbatim.
+In all cases, display the created bean content in the response.
 
-Require explicit user confirmation that the bean accurately matches intent before scheduling.
+### 4) Convert WHEN to deterministic timestamp
 
-### 4) Convert WHEN to deterministic `at` timestamp
+Use:
 
-Use `scripts/convert_when_to_at_timestamp.py` to convert natural language into a strict `YYYYMMDDHHMM` timestamp for `at -t`.
-Use `references/at-timespec-examples.md` for supported grammar and examples.
+```bash
+python3 "$skill_root/scripts/convert_when_to_at_timestamp.py" \
+  --when "<when_expression>" \
+  --timezone "<IANA timezone>"
+```
 
-Rules:
-- Preserve exact date/time if provided.
-- If only **morning** is provided, resolve deterministically inside **08:00–09:00**.
-- If only **evening** is provided, resolve deterministically inside **18:00–23:59**.
-- If timezone is ambiguous, use local system timezone and state that assumption.
-- Reject unsupported WHEN phrases and request a supported phrase.
+Use `--now` only for deterministic testing.
+
+Primary policy: pass explicit timezone.
+Fallback policy (only when explicit timezone unavailable and user accepts): converter resolves from `TZ` environment, then local IANA timezone when available, then UTC.
 
 ### 5) Verify/install `at`
 
-1. Run `scripts/verify_at.sh`.
-2. If verification fails, offer installation via `scripts/install_at.sh`.
-3. Do not continue scheduling until `at` is available.
+1. `bash "$skill_root/scripts/verify_at.sh"`
+2. If missing, offer install via `bash "$skill_root/scripts/install_at.sh"`
+3. Do not continue until verification succeeds.
 
 ### 6) Schedule asynchronous execution
 
 Construct prompt:
 
-`Complete the <absolute/path/to/bean-file>`
+`Complete the <absolute/path/to/bean-file> in <absolute/cwd>. Run required verification before reporting done.`
 
 Schedule via:
 
-`bash scripts/schedule_with_at.sh "<YYYYMMDDHHMM>" "Complete the <absolute/path/to/bean-file>" "<codex|omp>"`
+```bash
+bash "$skill_root/scripts/schedule_with_at.sh" \
+  "<YYYYMMDDHHMM>" \
+  "Complete the <absolute/path/to/bean-file> in <absolute/cwd>. Run required verification before reporting done." \
+  "<codex|omp>"
+```
 
-Default `llm_cli` to `codex`; switch to `omp` only when the user explicitly requests omp.
+### 7) Verify queue presence
 
-### 7) Return script output exactly
+After scheduling, verify returned job ID exists in queue (`at -l`). Treat missing queue entry as failure.
 
-Return the exact stdout/stderr produced by `scripts/schedule_with_at.sh`.
+### 8) Return script output exactly
+
+Return exact stdout/stderr from `schedule_with_at.sh`.
 
 ## Deterministic Safeguards
 
-- Reject scheduling if WHAT or WHEN is missing.
-- Reject scheduling if bean confirmation was not provided.
-- Reject scheduling if `.beans/` cannot be written.
-- Reject scheduling if `at` remains unavailable after install attempt.
+- Reject if WHAT or WHEN is missing.
+- Reject if converter cannot parse WHEN.
+- Reject if `.beans/` cannot be created/written.
+- Reject if `at` is unavailable after install attempt.
+- Reject if scheduled job ID is not present in `at -l`.
 
 ## Output Contract
 
-When successful, provide:
-1. Created bean path.
-2. Final `at` timestamp used (`YYYYMMDDHHMM`).
-3. Selected provider (`codex` or `omp`).
-4. Exact scheduling script output.
+On success, provide:
+1. Bean path
+2. Final `at` timestamp (`YYYYMMDDHHMM`)
+3. Timezone used
+4. Selected provider (`codex` or `omp`)
+5. Exact scheduler script output
 
 ## Script References
 
-- `scripts/verify_at.sh` — checks if `at` is installed and minimally usable on macOS/Linux.
-- `scripts/install_at.sh` — best-effort install flow for macOS/Linux package managers.
-- `scripts/convert_when_to_at_timestamp.py` — deterministic converter from natural language WHEN to `at -t` timestamp.
-- `scripts/schedule_with_at.sh` — submits the asynchronous LLM command via `at -t`.
-- `references/at-timespec-examples.md` — deterministic conversion guide and examples.
-- `assets/bean-task-template.md` — fallback bean template structure.
+- `scripts/verify_at.sh` — checks if `at` is available.
+- `scripts/install_at.sh` — installs `at` on macOS/Linux.
+- `scripts/convert_when_to_at_timestamp.py` — deterministic natural-language WHEN conversion.
+- `scripts/schedule_with_at.sh` — submits command with `at -t` and verifies queue entry.
+- `references/at-timespec-examples.md` — supported grammar and examples.
+- `assets/bean-task-template.md` — canonical bean schema template.

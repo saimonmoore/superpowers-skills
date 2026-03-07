@@ -44,5 +44,18 @@ job_line="$(printf '%q ' "${cmd[@]}")"
 job_line="${job_line% }"
 
 at_output="$(printf '%s\n' "$job_line" | at -t "$at_timestamp" 2>&1)"
-
 printf '%s\n' "$at_output"
+
+job_id="$(printf '%s\n' "$at_output" | sed -n 's/^job \([0-9][0-9]*\) .*/\1/p' | sed -n '1p')"
+if [ -z "$job_id" ]; then
+  echo "Unable to parse scheduled job id from at output"
+  exit 5
+fi
+
+if at -l | awk '{print $1}' | grep -Fxq "$job_id"; then
+  echo "verified job $job_id present in at queue"
+  exit 0
+fi
+
+echo "Scheduled job $job_id not found in at queue"
+exit 6

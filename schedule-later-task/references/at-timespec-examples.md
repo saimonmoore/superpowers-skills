@@ -1,23 +1,33 @@
 # Deterministic `at -t` Timestamp Conversion Guide
 
-Convert a natural-language WHEN phrase into a strict `at -t` timestamp (`YYYYMMDDHHMM`) using `scripts/convert_when_to_at_timestamp.py`.
+Convert natural-language `WHEN` phrases to strict `YYYYMMDDHHMM` and schedule with `at -t`.
 
-## Why `at -t`
+## Path Convention
 
-- Avoid shell/locale-dependent `at` free-form parsing.
-- Ensure repeated runs with same input resolve to same schedule.
-- Make scheduling output testable and auditable.
+Use absolute skill paths:
+
+```bash
+skill_root="/absolute/path/to/schedule-later-task"
+```
 
 ## Canonical Flow
 
-1. Run converter script:
+1. Verify `at`:
    ```bash
-   python3 scripts/convert_when_to_at_timestamp.py --when "tomorrow morning"
+   bash "$skill_root/scripts/verify_at.sh"
    ```
-2. Read JSON output field: `at_timestamp`
-3. Schedule with:
+2. Convert `WHEN`:
    ```bash
-   bash scripts/schedule_with_at.sh "<at_timestamp>" "Complete the <absolute/path/to/bean-file>" "codex"
+   python3 "$skill_root/scripts/convert_when_to_at_timestamp.py" \
+     --when "tomorrow morning" \
+     --timezone "Europe/Berlin"
+   ```
+3. Schedule:
+   ```bash
+   bash "$skill_root/scripts/schedule_with_at.sh" \
+     "<YYYYMMDDHHMM>" \
+     "Complete the <absolute/path/to/bean-file> in <absolute/cwd>. Run required verification before reporting done." \
+     "codex"
    ```
 
 ## Supported WHEN Grammar
@@ -29,26 +39,30 @@ Convert a natural-language WHEN phrase into a strict `at -t` timestamp (`YYYYMMD
 - `weekday morning|evening` (`next` optional)
 - `YYYY-MM-DD [HH:MM]`
 
-Unsupported phrases must fail fast and ask user for a supported form.
+Unsupported phrases must fail fast.
 
-## Deterministic Window Rules
+## Timezone Policy
 
-### Morning
-- Window: `08:00`–`09:00`
-- Slot count: 61 minutes
-- Result selected by deterministic hash; no RNG.
+Preferred: pass explicit `--timezone` (IANA key).
 
-### Evening
-- Window: `18:00`–`23:59`
-- Slot count: 360 minutes
-- Result selected by deterministic hash; no RNG.
+Fallback hierarchy in converter:
+1. `TZ` environment variable
+2. local IANA timezone (if available)
+3. `UTC`
 
-## Examples
+Converter reports assumptions in output JSON.
 
-Use fixed `--now` in tests to make outputs reproducible.
+## Deterministic Windows
+
+- `morning`: `08:00–09:00`
+- `evening`: `18:00–23:59`
+
+Time slot is selected by deterministic hash. Same inputs produce the same output.
+
+## Example
 
 ```bash
-python3 scripts/convert_when_to_at_timestamp.py \
+python3 "$skill_root/scripts/convert_when_to_at_timestamp.py" \
   --when "tomorrow morning" \
   --timezone "Europe/Berlin" \
   --now "2026-03-07T10:15:00+01:00"
@@ -58,20 +72,11 @@ python3 scripts/convert_when_to_at_timestamp.py \
 {"at_timestamp":"202603080849","resolved_iso":"2026-03-08T08:49:00+01:00","rule":"tomorrow_morning","assumptions":[]}
 ```
 
-```bash
-python3 scripts/convert_when_to_at_timestamp.py \
-  --when "monday at 5pm" \
-  --timezone "Europe/Berlin" \
-  --now "2026-03-07T10:15:00+01:00"
+## Scheduler Verification
+
+`schedule_with_at.sh` validates queue presence after submit.
+Expected tail output:
+
+```text
+verified job <id> present in at queue
 ```
-
-```json
-{"at_timestamp":"202603091700","resolved_iso":"2026-03-09T17:00:00+01:00","rule":"weekday_explicit_time","assumptions":[]}
-```
-
-## Validation Checklist
-
-1. Confirm converter output is valid JSON with `at_timestamp`.
-2. Confirm timestamp format is exactly 12 digits (`YYYYMMDDHHMM`).
-3. Confirm `resolved_iso` is future relative to execution time.
-4. Pass only `at_timestamp` to `schedule_with_at.sh`.
