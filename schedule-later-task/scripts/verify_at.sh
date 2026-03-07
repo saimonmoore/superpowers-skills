@@ -14,7 +14,6 @@ if at -l >/dev/null 2>&1; then
   exit 0
 fi
 
-# Some systems return non-zero on empty queue; treat usage output as acceptable.
 if at -V >/dev/null 2>&1 || at --version >/dev/null 2>&1; then
   echo "at utility is installed (version check passed)"
 else

@@ -13,10 +13,9 @@ updated_at: <UTC-ISO-8601>
 <single outcome-oriented paragraph>
 
 ## Scope
+- Requested WHEN: <when phrase>
 - Current Working Directory: <absolute path>
-- Git branch: <current branch or planned branch>
-- Target Areas:
-  - <paths/modules>
+- Git branch: <branch>
 
 ## Checklist
 - [ ] <analysis/refinement step>
@@ -27,4 +26,4 @@ updated_at: <UTC-ISO-8601>
 ## Definition of Done
 - <observable correctness condition>
 - <test/verification condition>
-- <artifact condition, for example PR/commit/bean update>
+- <artifact condition>

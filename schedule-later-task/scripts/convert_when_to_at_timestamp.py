@@ -4,8 +4,8 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import re
 import os
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -66,6 +66,7 @@ def resolve_timezone(args_timezone: str | None) -> tuple[ZoneInfo, list[str]]:
 
     assumptions.append("fell back to UTC timezone")
     return ZoneInfo("UTC"), assumptions
+
 
 def resolve_now(now_value: str | None, tz: ZoneInfo) -> datetime:
     if not now_value:
@@ -133,7 +134,6 @@ def convert_when_expression(raw_when: str, now: datetime, tz: ZoneInfo, assumpti
     if not when:
         raise ConversionError("Missing --when value")
 
-    # in N minutes|hours|days
     rel = re.fullmatch(r"in\s+(\d+)\s+(minute|minutes|hour|hours|day|days)", when)
     if rel:
         amount = int(rel.group(1))
@@ -147,7 +147,6 @@ def convert_when_expression(raw_when: str, now: datetime, tz: ZoneInfo, assumpti
         resolved = resolved.replace(second=0, microsecond=0)
         return ConversionResult(at_timestamp(resolved), resolved.isoformat(), "relative_duration", assumptions)
 
-    # YYYY-MM-DD [HH:MM]
     iso_date = re.fullmatch(r"(\d{4}-\d{2}-\d{2})(?:\s+(\d{1,2}:\d{2}))?", when)
     if iso_date:
         base_day = datetime.fromisoformat(f"{iso_date.group(1)}T00:00:00").replace(tzinfo=tz)
@@ -156,7 +155,6 @@ def convert_when_expression(raw_when: str, now: datetime, tz: ZoneInfo, assumpti
         resolved = apply_time(base_day, hour, minute)
         return ConversionResult(at_timestamp(resolved), resolved.isoformat(), "iso_date", assumptions)
 
-    # tomorrow [at HH(:MM)?(am|pm)?]
     tomorrow_explicit = re.fullmatch(r"tomorrow(?:\s+at\s+(.+))?", when)
     if tomorrow_explicit:
         base_day = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
@@ -169,7 +167,6 @@ def convert_when_expression(raw_when: str, now: datetime, tz: ZoneInfo, assumpti
         resolved = apply_time(base_day, hour, minute)
         return ConversionResult(at_timestamp(resolved), resolved.isoformat(), "tomorrow", assumptions)
 
-    # tomorrow morning/evening
     tomorrow_window = re.fullmatch(r"tomorrow\s+(morning|evening)", when)
     if tomorrow_window:
         window = tomorrow_window.group(1)
@@ -184,7 +181,6 @@ def convert_when_expression(raw_when: str, now: datetime, tz: ZoneInfo, assumpti
         resolved = apply_time(base_day, hour, minute)
         return ConversionResult(at_timestamp(resolved), resolved.isoformat(), f"tomorrow_{window}", assumptions)
 
-    # weekday [at HH(:MM)?(am|pm)?]
     weekday_at = re.fullmatch(
         r"(?:next\s+)?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)(?:\s+at\s+(.+))?",
         when,
@@ -202,7 +198,6 @@ def convert_when_expression(raw_when: str, now: datetime, tz: ZoneInfo, assumpti
         resolved = apply_time(target_day, 9, 0)
         return ConversionResult(at_timestamp(resolved), resolved.isoformat(), "weekday_default_time", assumptions)
 
-    # weekday morning/evening
     weekday_window = re.fullmatch(
         r"(?:next\s+)?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+(morning|evening)",
         when,

@@ -38,7 +38,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--fast", action="store_true", help="Skip optional repo refinement and keep compact bean checklist")
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
-    parser.add_argument("--mail-marker-prefix", default="schedule-later-task-v2", help="Prefix for guaranteed at mail marker line")
+    parser.add_argument("--mail-marker-prefix", default="schedule-later-task", help="Prefix for guaranteed at mail marker line")
     parser.add_argument("--now", help="Fixed current time for deterministic tests")
     return parser.parse_args()
 

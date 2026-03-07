@@ -2,124 +2,96 @@
 
 ## Objective
 
-Schedule repository tasks for later execution in a deterministic and auditable way.
+Provide a faster, one-command scheduling workflow that is deterministic and machine-readable.
 
-The skill refines a task, writes a bean task file, converts natural language time to a strict `at -t` timestamp, and schedules asynchronous execution with `codex` (default) or `omp`.
+Compared to v1, v2 moves most flow logic into `scripts/schedule_task.py` and returns structured JSON for easier automation and debugging.
 
-## Trigger Conditions
-
-Trigger only when both are present:
-- **WHAT**: task to execute.
-- **WHEN**: scheduling phrase.
-
-Do not trigger if `WHEN` is missing.
-
-## Path Setup
-
-Resolve the skill path first and use absolute script paths.
+## Canonical Usage
 
 ```bash
-skill_root="/absolute/path/to/schedule-later-task"
-```
+skill_root="/Users/saimon.moore/Development/AI/superpowers-skills/schedule-later-task"
 
-## Components
-
-- `SKILL.md` — behavior contract and workflow.
-- `assets/bean-task-template.md` — canonical bean schema template.
-- `references/at-timespec-examples.md` — supported WHEN grammar and conversion examples.
-- `scripts/verify_at.sh` — verify `at` availability.
-- `scripts/install_at.sh` — install `at` if missing.
-- `scripts/convert_when_to_at_timestamp.py` — deterministic `WHEN` to `YYYYMMDDHHMM` converter.
-- `scripts/schedule_with_at.sh` — schedule with `at -t` and verify queue entry.
-
-## Usage Flow
-
-1. Capture `task_description`, `when_expression`, `timezone`, `provider`.
-2. Refine task against repo context.
-3. Ensure bean directory exists:
-   ```bash
-   mkdir -p .beans
-   ```
-4. Create bean file under `.beans/` using `assets/bean-task-template.md`.
-5. Show bean content.
-   - Auto-proceed for clear low-risk requests.
-   - Require explicit confirmation for ambiguous/high-risk/destructive requests.
-6. Verify `at`:
-   ```bash
-   bash "$skill_root/scripts/verify_at.sh"
-   ```
-7. Convert WHEN:
-   ```bash
-   python3 "$skill_root/scripts/convert_when_to_at_timestamp.py" \
-     --when "tomorrow morning" \
-     --timezone "Europe/Berlin"
-   ```
-8. Schedule using converter output:
-   ```bash
-   bash "$skill_root/scripts/schedule_with_at.sh" \
-     "<YYYYMMDDHHMM>" \
-     "Complete the <absolute/path/to/bean-file> in <absolute/cwd>. Run required verification before reporting done." \
-     "codex"
-   ```
-9. Return exact scheduler stdout/stderr.
-
-## Determinism and Timezone Policy
-
-- Preferred: always pass explicit IANA timezone (`--timezone`).
-- Fallback hierarchy in converter (if explicit timezone unavailable):
-  1. `TZ` environment variable (IANA key)
-  2. local IANA timezone (if available)
-  3. UTC (with assumption note)
-- `morning` resolves deterministically in `08:00–09:00`.
-- `evening` resolves deterministically in `18:00–23:59`.
-
-## Examples
-
-### Example A — Tomorrow morning
-
-```bash
-python3 "$skill_root/scripts/convert_when_to_at_timestamp.py" \
+python3 "$skill_root/scripts/schedule_task.py" \
+  --what "Create a task to open a PR formatting all files in the codebase" \
   --when "tomorrow morning" \
-  --timezone "Europe/Berlin" \
-  --now "2026-03-07T10:15:00+01:00"
+  --provider omp \\
+  --timezone Europe/Berlin \
+  --cwd "/Users/saimon.moore/Development/Onlyfy/jobs-b2b" \
+  --require-confirmation if-ambiguous \
+  --mail-marker-prefix schedule-later-task \
+  --json
 ```
 
-Output:
-```json
-{"at_timestamp": "202603080849", "resolved_iso": "2026-03-08T08:49:00+01:00", "rule": "tomorrow_morning", "assumptions": []}
-```
+`--mail-marker-prefix` is optional and defaults to `schedule-later-task`.
+Default provider is `omp`.
 
-### Example B — Monday at 5pm
+## Identify Scheduled Jobs
+
+`atq` shows numeric IDs only. Use this helper to map IDs to marker prefix, provider, and bean path:
 
 ```bash
-python3 "$skill_root/scripts/convert_when_to_at_timestamp.py" \
-  --when "monday at 5pm" \
-  --timezone "Europe/Berlin" \
-  --now "2026-03-07T10:15:00+01:00"
+python3 "$skill_root/scripts/list_scheduled_jobs.py"
 ```
 
-Output:
+## Script Responsibilities
+
+- `schedule_task.py` orchestrates end-to-end flow:
+  - create `.beans/` if needed
+  - render bean
+  - resolve WHEN -> timestamp
+  - verify `at`
+  - schedule with provider
+  - verify queue entry
+  - emit JSON result
+- `render_bean.py` handles deterministic bean creation.
+- `convert_when_to_at_timestamp.py` handles deterministic time parsing.
+- `schedule_with_at.sh` submits/validates queue placement.
+- `list_scheduled_jobs.py` maps `atq` IDs to marker prefix/provider/bean path using `at -c`.
+
+## Output JSON
+
+Typical success response:
+
 ```json
-{"at_timestamp": "202603091700", "resolved_iso": "2026-03-09T17:00:00+01:00", "rule": "weekday_explicit_time", "assumptions": []}
+{
+  "status": "scheduled",
+  "requires_confirmation": false,
+  "bean_path": "/abs/path/.beans/jobs-scheduled--...md",
+  "at_timestamp": "202603080849",
+  "provider": "codex",
+  "job_id": "42",
+  "scheduled_for": "2026-03-08T08:49:00+01:00",
+  "warnings": [],
+  "assumptions": [],
+  "errors": [],
+  "mail_marker_prefix": "schedule-later-task",
+  "schedule_output": "job 42 at Sun Mar  8 08:49:00 2026\nverified job 42 present in at queue"
+}
 ```
 
-### Example C — Scheduling output
+Possible non-success states:
+- `status: needs_confirmation` (exit code 2)
+- `status: error` (exit code 1)
+
+## Fast Mode
+
+Add `--fast` for clear low-risk requests:
 
 ```bash
-bash "$skill_root/scripts/schedule_with_at.sh" "202603091700" "Complete the /abs/.beans/task.md in /abs/repo. Run required verification before reporting done." "codex"
+python3 "$skill_root/scripts/schedule_task.py" \
+  --what "Create task to update docs links" \
+  --when "in 20 minutes" \
+  --provider codex \
+  --timezone Europe/Berlin \
+  --cwd "/Users/saimon.moore/Development/Onlyfy/jobs-b2b" \
+  --fast \
+  --json
 ```
 
-Possible output:
-```text
-job 42 at Mon Mar  9 17:00:00 2026
-verified job 42 present in at queue
-```
+## Notes
 
-## Failure Cases
-
-- Missing WHAT/WHEN.
-- Unsupported WHEN grammar.
-- Bean file cannot be created after `mkdir -p .beans`.
-- `at` unavailable after install attempt.
-- Invalid timestamp (not 12 digits).
-- Scheduled job ID not present in `at -l`.
+- No `config.toml` is used in v2.
+- Prefer explicit `--timezone` for deterministic behavior.
+- Keep v1 and v2 side-by-side for comparative testing.
+- `schedule_with_at.sh` sends a custom notification mail immediately after enqueue + queue verification, with marker prefix/provider/timestamp/bean context.
+- Queued job still prints completion marker at execution, so default `at` mail output is preserved.

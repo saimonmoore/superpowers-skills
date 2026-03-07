@@ -1,147 +1,95 @@
 ---
 name: schedule-later-task
-description: Use when a user asks to create a task now and execute it at a later time/date (for example "tomorrow morning", "in 2 hours", "Monday at 5pm") and both WHAT and WHEN are present
+description: Use when a user asks to create a task now and execute it at a later time/date and both WHAT and WHEN are present; runs a deterministic one-command scheduling orchestrator
 ---
 
-# Schedule Later Task
+# Schedule Later Task V2
 
 ## Overview
 
-Convert a natural-language deferred-work request into a deterministic scheduled execution. Refine scope against the repository, persist a bean task, and schedule asynchronous execution through `at -t`.
+Run deferred task scheduling through one deterministic orchestrator command. The command creates a bean task, converts WHEN to `at -t` timestamp, verifies `at`, schedules execution, and returns structured JSON.
 
 ## Trigger Conditions
 
-Trigger only when BOTH elements are present:
-1. **WHAT**: concrete task to execute.
-2. **WHEN**: concrete scheduling phrase.
+Trigger only when BOTH are present:
+1. WHAT task should be executed.
+2. WHEN it should run.
 
 Do not trigger if WHEN is missing.
 
-## Typical User Phrases
+## Canonical Command
 
-- "Create a task to ... and execute it tomorrow morning"
-- "Create a task to ... and schedule it for Monday 5pm"
-- "Create a task to ... for an hour from now"
-- "Schedule a task to ... on Tuesday evening"
-
-## Required Inputs
-
-Collect/derive before scheduling:
-- `task_description`
-- `when_expression`
-- `timezone` (IANA, for example `Europe/Berlin`; required unless user allows fallback)
-- `llm_cli` (`codex` default, `omp` only when explicitly requested)
-
-## Path Resolution
-
-Resolve and use absolute paths for all script calls.
+Set skill root to an absolute path:
 
 ```bash
-skill_root="/absolute/path/to/schedule-later-task"
+skill_root="/Users/saimon.moore/Development/AI/superpowers-skills/schedule-later-task"
 ```
 
-All script invocations must use `$skill_root/scripts/...`.
-
-## Workflow
-
-### 1) Refine task against codebase
-
-1. Inspect repository context using `find`, `grep`, `read`.
-2. Clarify concrete scope (affected paths, constraints, verification expectations).
-3. Produce refined execution checklist.
-
-### 2) Create bean task from schema template (primary source)
-
-Use `assets/bean-task-template.md` as the canonical structure.
-
-Optional: use `.beans/jobs-b2b-idpo--tech-debt-cleanup-and-remove-unused-jobs-backend-d.md` only as style reference when available.
-
-Before writing bean:
+Run:
 
 ```bash
-mkdir -p .beans
+python3 "$skill_root/scripts/schedule_task.py" \
+  --what "<task description>" \
+  --when "<when expression>" \
+  --provider "<codex|omp>" \
+  --timezone "<IANA timezone>" \
+  --cwd "<absolute/repo/path>" \
+  --require-confirmation if-ambiguous \
+  --mail-marker-prefix schedule-later-task \
+  --json
 ```
 
-Then persist a bean under `.beans/` with:
-- frontmatter (`title`, `status: todo`, `type: task`, `priority`, `tags`, `created_at`, `updated_at`)
-- `## Goal`
-- `## Scope`
-- `## Checklist`
-- `## Definition of Done`
+`--mail-marker-prefix` is optional and defaults to `schedule-later-task`.
+Default provider is `omp`.
 
-### 3) Confirmation policy (conditional)
+## Fast Mode
 
-- **Proceed without blocking confirmation** when WHAT/WHEN are clear, non-destructive, and low-risk.
-- **Require explicit confirmation** when request is ambiguous, destructive, high-risk, or impacts production/data/security boundaries.
+For clear low-risk requests, add `--fast` to keep compact bean checklist and skip optional refinement.
 
-In all cases, display the created bean content in the response.
+## Confirmation Policy
 
-### 4) Convert WHEN to deterministic timestamp
+Use `--require-confirmation` with:
+- `always`
+- `if-ambiguous` (default)
+- `never`
 
-Use:
-
-```bash
-python3 "$skill_root/scripts/convert_when_to_at_timestamp.py" \
-  --when "<when_expression>" \
-  --timezone "<IANA timezone>"
-```
-
-Use `--now` only for deterministic testing.
-
-Primary policy: pass explicit timezone.
-Fallback policy (only when explicit timezone unavailable and user accepts): converter resolves from `TZ` environment, then local IANA timezone when available, then UTC.
-
-### 5) Verify/install `at`
-
-1. `bash "$skill_root/scripts/verify_at.sh"`
-2. If missing, offer install via `bash "$skill_root/scripts/install_at.sh"`
-3. Do not continue until verification succeeds.
-
-### 6) Schedule asynchronous execution
-
-Construct prompt:
-
-`Complete the <absolute/path/to/bean-file> in <absolute/cwd>. Run required verification before reporting done.`
-
-Schedule via:
-
-```bash
-bash "$skill_root/scripts/schedule_with_at.sh" \
-  "<YYYYMMDDHHMM>" \
-  "Complete the <absolute/path/to/bean-file> in <absolute/cwd>. Run required verification before reporting done." \
-  "<codex|omp>"
-```
-
-### 7) Verify queue presence
-
-After scheduling, verify returned job ID exists in queue (`at -l`). Treat missing queue entry as failure.
-
-### 8) Return script output exactly
-
-Return exact stdout/stderr from `schedule_with_at.sh`.
-
-## Deterministic Safeguards
-
-- Reject if WHAT or WHEN is missing.
-- Reject if converter cannot parse WHEN.
-- Reject if `.beans/` cannot be created/written.
-- Reject if `at` is unavailable after install attempt.
-- Reject if scheduled job ID is not present in `at -l`.
+If confirmation is required, script returns `status: needs_confirmation` and exits non-zero.
 
 ## Output Contract
 
-On success, provide:
-1. Bean path
-2. Final `at` timestamp (`YYYYMMDDHHMM`)
-3. Timezone used
-4. Selected provider (`codex` or `omp`)
-5. Exact scheduler script output
+Successful run returns JSON with:
+- `status: "scheduled"`
+- `bean_path`
+- `at_timestamp`
+- `provider`
+- `job_id`
+- `scheduled_for`
+- `warnings`
+- `assumptions`
+- `mail_marker_prefix`
+
+Failure returns `status: "error"` and `errors`.
+
+## Deterministic Safeguards
+
+- `.beans/` is created before bean write.
+- Bean naming is deterministic and collision-safe.
+- WHEN parsing is strict and deterministic.
+- Queue verification is required (`verified job <id> present in at queue`).
+- Scheduler sends a custom notification mail immediately after `at` enqueue + queue verification, with marker prefix/provider/timestamp/bean context.
+- Queued job still emits completion marker at execution so default `at` mail contains outcome details.
+
+Inspect queue entries with labels:
+
+```bash
+python3 "$skill_root/scripts/list_scheduled_jobs.py"
+```
 
 ## Script References
 
-- `scripts/verify_at.sh` — checks if `at` is available.
-- `scripts/install_at.sh` — installs `at` on macOS/Linux.
-- `scripts/convert_when_to_at_timestamp.py` — deterministic natural-language WHEN conversion.
-- `scripts/schedule_with_at.sh` — submits command with `at -t` and verifies queue entry.
-- `references/at-timespec-examples.md` — supported grammar and examples.
-- `assets/bean-task-template.md` — canonical bean schema template.
+- `scripts/schedule_task.py` — orchestrator entrypoint.
+- `scripts/render_bean.py` — deterministic bean renderer.
+- `scripts/convert_when_to_at_timestamp.py` — deterministic WHEN converter.
+- `scripts/verify_at.sh` / `scripts/install_at.sh` — at utility lifecycle.
+- `scripts/schedule_with_at.sh` — schedules and confirms queue presence.
+- `scripts/list_scheduled_jobs.py` — shows `atq` jobs enriched with marker prefix, provider, and bean path.
