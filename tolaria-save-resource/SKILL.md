@@ -1,11 +1,13 @@
 ---
 name: tolaria-save-resource
-description: Save something the user has sent (typically from Telegram) as a Resources note in the Tolaria vault at /home/excsm/.openclaw/workspace/code/tolaria, then commit and push. Two modes — URL mode fires when the message contains a URL (a bare URL is enough); text mode fires when the message contains a save phrase like "save this clawd", "for tolaria", "add to vault", "save to tolaria", "make a resource". Use whenever the user is clearly asking to capture something into the vault, not when they're asking a question about it.
+description: Save something the user has sent (typically from Telegram) as a Resources note in the Tolaria vault at /home/excsm/.openclaw/workspace/code/tolaria, then commit and push. ALWAYS invoke this skill — without first asking the user, and without offering a menu of alternatives — when (a) the message contains a URL (URL mode; a bare URL alone is sufficient), or (b) the message contains a save phrase like "save this clawd", "for tolaria", "add to vault", "save to tolaria", "make a resource" (text mode). Only skip the skill when the user is explicitly asking a question *about* the content instead of to save it ("summarize this", "what does this say about X", "is this any good?", "should I read this?"); in that case answer the question first and let the user follow up if they then want to save.
 ---
 
 # Tolaria Save Resource
 
 ## Trigger and mode selection
+
+**Just save — don't offer a menu.** A bare URL from the user is a save command, not an ambiguous prompt. Don't reply with "do you want me to save it, summarize it, or open it?" — pick a mode using the table below and run it. If the user actually wanted something else they'll say so on the next turn.
 
 Decide first which mode to run, or whether to run at all.
 
